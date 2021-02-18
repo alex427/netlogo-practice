@@ -1,0 +1,749 @@
+extensions [matrix]
+
+breed [Acciones Accion]
+breed [Agentes Agente]
+
+globals [
+  choque?
+  t_choque
+  array_ref
+  historic_price
+  historic_rent
+  historic_trans 
+  book_buy
+  book_sell
+  daily_book  
+  lin_trend_fund
+  actual_price
+  actual_volume
+  ret_price
+  ret_db
+  ret_medio
+  number_agents
+  number_acciones
+  min_agentes
+  global_fund
+  fund?
+  rent_db
+  index_array
+  ]
+
+
+Acciones-own [
+ precio 
+ estado
+ propietario]
+
+Agentes-own [
+ dinero_inic
+ dinero
+ patrimonio
+ mi_rendimiento
+ tipo
+ g1
+ g2
+ Li
+ ki
+ rLi
+ ni
+ ei
+ ri
+ pt+1
+ ai
+ bi
+ portafolio
+ desde
+ senal
+]
+
+to setup
+  __clear-all-and-reset-ticks
+  file-close-all
+  set historic_price []
+  set historic_rent []
+  set ret_db []
+  set rent_db []
+  set index_array []
+  set choque? 0
+  set array_ref [] ;Fund_perc, Tasa_ref
+  ;if Crecimiento = true [set fund? true]
+  set fund? true
+  set min_agentes int(Agentes_Iniciales / 2)
+  set global_fund Fundamental
+  set historic_trans [] ;Formato por posiciones:
+                        ;  0      1      2        3        4  
+                        ;Periodo  De    Para    Titulo   Valor
+  set book_buy [] ;Formato por posiciones
+                  ;  0      1         2           3
+                  ;Valor  Agente  Cantidad   Vigente_Hasta
+  set book_sell [] ;Formato por posiciones
+                   ;  0      1       2
+                   ;Valor  Agente  Titulo
+  ask patches [set pcolor white]
+  setup_plots
+  gen_hist_price
+  setup_indice
+  set-default-shape turtles "Person"
+  create-Agentes Agentes_Iniciales [
+    setxy random-pxcor random-pycor 
+    set portafolio []
+    update_atributos
+    update_expectations
+    allocate_money
+    set desde ticks]
+  foreach [who] of agentes [
+    create-Acciones 1 [
+      set hidden? true
+      set size 0.1
+      set estado "vendida"
+      let ac who
+      set propietario ?
+      ask agente ? [
+        set dinero dinero - last(historic_price)
+        let tempar []
+        set tempar lput(ac) tempar
+        set tempar lput(last(historic_price)) tempar
+        set tempar lput(ticks) tempar
+        set portafolio lput(tempar) portafolio
+        set shape "person student"
+        ]
+      set precio last(historic_price) 
+    ]
+  ]
+  update_patrimonio
+  update_plots 2
+  set actual_price last(historic_price)
+end 
+
+to go
+  if ticks = 0 and Modo = "Traza" [
+    file-close-all
+    if file-exists? "ASM.txt" [file-delete "ASM.txt"]
+    file-open "ASM.txt"
+    file-write "Per"
+    file-write "Tasa"
+    file-write "Tec"
+    file-write "Fund"
+    file-write "Ruido"
+    file-write "Pt"
+    file-write " "
+    file-print "Ret"
+    ]
+
+  ;if ticks > 1000 [stop]
+  if Disp_val? = True
+  [print (word"Periodo " ticks)]
+  if ticks = 0 and Disp_val? = True
+  [print (word"El precio inicial es de " last(historic_price))]
+  ask agentes [update_expectations]
+  start_bids
+  transar
+  update_price
+  update_patrimonio
+  update_plots 3 
+  collect_statistics
+  clean_db
+  if count(Acciones with [estado = "libre"]) = 0
+  [crear_titulos]
+  if choque? != 0 [
+    ifelse t_choque = 0 [
+      set choque? 0
+      set global_fund lin_trend_fund
+      set T_Ref_% item 1 array_ref] [
+      if choque? = 1 [
+        set global_fund (lin_trend_fund * (1 + Magnitud / 50))
+        repeat 2 [create_new_agents]]
+    set t_choque t_choque - 1]]
+  tick
+end 
+
+
+;------------------------------------------------;
+;---------------- SETUP SUBRUTINES --------------;
+;------------------------------------------------;
+
+to create_new_agents 
+   create-Agentes 1 [ 
+     setxy random-pxcor random-pycor 
+     set portafolio []
+     update_atributos
+     update_expectations
+     allocate_money
+     let tt length(portafolio) * last(historic_price)
+     set patrimonio int(dinero + tt)
+     set desde ticks]
+end 
+
+to update_atributos
+    set ni abs(random-normal 0 n0)      ;chiarella lo usa solo y LeBaron con ABS
+    set g1 abs(random-normal 0 sigma_1)
+    set g2 random-normal 0 sigma_2
+    set ki 0.001 + random-float k
+    set ei random-normal 0 1      ;Este valor se re-calcula a cada instante
+    set Li 1 + random L_max
+    ifelse abs(abs(g1) - abs(g2)) <= ruido
+    [set tipo "Noisy"] 
+    [ifelse abs(g1) > abs(g2) [set tipo "Fundamentalista"]
+      [ifelse g2 > 0
+        [set tipo "Trend Chasing"] 
+        [set tipo "Chartist"]]]
+    if tipo = "Fundamentalista"
+    [set color Yellow]
+    if tipo = "Noisy"
+    [set color black]
+    if tipo = "Trend Chasing"
+    [set color blue]
+    if tipo = "Chartist"
+    [set color red]
+end 
+
+to gen_hist_price
+  let j 0
+  let p0 Fundamental
+  let p1 p0
+  while [j < 200]
+  [
+    let randval random-normal 0.000812358520455973 0.0109806285398027
+    if length(index_array) > 0 [
+      set randval random-normal (item 1 index_array) sqrt (item 4 index_array)]
+    ifelse j != 199 [
+      set historic_rent lput(randval) historic_rent
+      set p1 p0 + p0 * last(historic_rent)
+      set historic_price lput(p1) historic_price]
+    [set p1 aprox (p0 + p0 * randval) tick_size
+      set historic_price lput(p1) historic_price
+      set historic_rent lput(ln(p1 / p0)) historic_rent]
+    set p0 p1
+    update_plots 1
+    set j j + 1]
+end 
+
+to setup_plots
+  set-current-plot "Precio"
+  set-plot-y-range (Fundamental - 1000) (Fundamental + 1000)
+  set-current-plot "Retornos"
+  set-plot-y-range -.03 .03
+  set-current-plot "Retorno Promedio"
+  set-plot-y-range 0 .002
+  set-current-plot "Rentabilidad"
+  set-plot-y-range 0 5
+end 
+
+to allocate_money
+  let m 0
+  let d 1
+  ifelse Media_riqueza_inicial > global_fund * 4
+  [set m Media_riqueza_inicial]
+  [set m global_fund * 4]
+  set d m / 10
+  if Distribucion_riqueza_inicial = "Constante" [set dinero m]
+  if Distribucion_riqueza_inicial = "Normal" [set dinero round(random-normal m d)]
+  if Distribucion_riqueza_inicial = "Uniforme" [set dinero round( m * 3 / 4 + random-float (1 / 2 * m))]
+  if Distribucion_riqueza_inicial = "Pareto" [set dinero round((m * 0.9) / ((random-float 1) ^ (1 / 5)))]  
+  if Distribucion_riqueza_inicial = "Lognormal" 
+  [set dinero round(exp(ln(m) - (1 / 2) * ln(1 + (d / m) ^ 2) + (random-normal 0 1) * (ln(1 + (d / m) ^ 2)) ^ (1 / 2)))]
+  set dinero_inic dinero
+end 
+
+;------------------------------------------------;
+;----------------- GO SUBRUTINES ----------------;
+;------------------------------------------------;
+
+to update_expectations
+  let flag 0
+  let q 0
+  while [flag = 0] [
+    set ei random-normal 0 1           ;Actualiza el error a cada instante
+    set rLi update_L Li
+    set ri g1 * ln(global_fund / last(historic_price)) + g2 * rLi + ni * ei 
+    set pt+1 last(historic_price) * exp(ri)
+    ;set q q + 1
+    if (pt+1 >= 0 and pt+1 <= last(historic_price) * 50) [ ;
+      ifelse senal = 0 [
+        set bi aprox int(pt+1 * (1 - ki)) tick_size
+        set ai aprox int(pt+1 * (1 + ki)) tick_size
+        set flag 1] 
+      [
+        let ktemp random-float ki
+        set bi aprox int(pt+1 * (1 - 1 * ki)) tick_size   ;Quien compra quiere comprar solo si es muy barato
+        set ai aprox int(pt+1 * (1 - 0.5 * ki)) tick_size ;Quien vende quiere vender asi sea perdiendo
+      set flag 1]]
+  ]
+end 
+
+to start_bids
+  set book_buy []
+  set book_sell []
+  ask agentes [
+   let rr random-float 1
+   if rr <= lambda [
+     ;if Actualizar_Atributos = True [fd .1]
+     if length(portafolio) > 0
+     [let i 0
+       while [i < length(portafolio)]
+       [let pa item 1 (item i portafolio)
+         if (pa > pt+1 or (senal < 0 and ai < pa));Si el valor de compra de la accion es mayor que el precio futuro => VENDE 
+         [let a2 first(item i portafolio)
+           let tempar []
+           set tempar lput(ai) tempar
+           set tempar lput(who) tempar
+           set tempar lput(a2) tempar
+           set book_sell lput(tempar) book_sell]
+         set i i + 1]]
+   ]]
+  
+  if count(acciones with [estado = "libre"]) > 0 [
+    let tempar [who] of acciones with [estado = "libre"]
+    let i 0
+    while [i < length(tempar)] [
+      let acc item i tempar
+      let my_array []
+      set my_array lput([precio] of accion acc) my_array
+      set my_array lput("B") my_array
+      set my_array lput(item i tempar) my_array
+      set book_sell lput my_array book_sell
+      set i i + 1]]
+  
+  ;show book_sell
+  ask agentes [
+    let rr random-float 1
+   if (rr <= lambda or senal > 0) and length(book_sell) > 0 [ 
+     let book_temp map [first ?] book_sell
+     if (pt+1 > min(book_temp) or senal < 0) and (dinero > bi and bi > 0) [ ;Si hay acciones a la venta a menor precio que su expectativa => COMPRA
+       let tempar []
+       set tempar lput(bi) tempar
+       set tempar lput(who) tempar
+       set tempar lput(int(dinero / bi)) tempar
+       set tempar lput(ticks + 1) tempar
+       set book_buy lput tempar book_buy] 
+   ]
+  ]
+  
+  set book_buy sort-by [first ?1 < first ?2] book_buy
+  set book_sell sort-by [first ?1 < first ?2] book_sell
+  set book_buy filter [first ? > 0] book_buy
+  set book_sell filter [first ? > 0] book_sell
+  
+  if Disp_Val? = true [
+    print (word "El libro de compra es ")
+    print book_buy
+    print (word "El libro de venta es ")
+    print book_sell]
+end 
+
+to transar
+  let t ticks
+  set actual_volume 0
+  if length(book_buy) > 0 [
+    ;Aqui debemos comenzar con el algoritmo de calce de subastas
+    ;1) Ordenar todas las ofertas de compra y venta de mayor a menor
+    let tempar_prix []
+    let filter_book_sell (filter [? <= (max(map [first ?] book_buy))] map [first ?] book_sell)
+    set tempar_prix reverse(sort(sentence (map [first ?] book_buy) filter_book_sell))
+    set tempar_prix remove-duplicates tempar_prix
+  
+    ;2) Por cada precio, crear un arreglo temporal que contenga 5 posiciones:
+    ;2.1 Precio
+    ;2.2 Qc 
+    ;2.3 Qv  
+    ;2.4 Calce
+    ;2.5 Desbalance
+    let tempar_prix_3 []
+    let i 0
+    let meanprix 0
+    while [i < length(tempar_prix)] [
+      let tempar_prix_2 [0 0 0 0 0]
+      set tempar_prix_2 replace-item 0 tempar_prix_2 (item i tempar_prix)                                                    ;Precio
+      set tempar_prix_2 replace-item 1 tempar_prix_2 sum(map [item 2 ?] (filter [first ? >= (item i tempar_prix)] book_buy)) ;Qc
+      set tempar_prix_2 replace-item 2 tempar_prix_2 length(filter [? <= (item i tempar_prix)] (map [first ?] book_sell))    ;Qv
+      let calce item 1 tempar_prix_2
+      if item 2 tempar_prix_2 < calce [set calce item 2 tempar_prix_2]
+      set tempar_prix_2 replace-item 3 tempar_prix_2 calce                                                                   ;Calce
+      let maxq item 1 tempar_prix_2
+      if item 2 tempar_prix_2 > maxq [set maxq item 2 tempar_prix_2]
+      set tempar_prix_2 replace-item 4 tempar_prix_2 (maxq - calce)                                                          ;Desbalance
+      set tempar_prix_3 lput tempar_prix_2 tempar_prix_3
+      set i i + 1]
+    
+    
+    ;Ahora se elige el mayor calce con el menor desbalance. 
+    ifelse length(tempar_prix) > 0 [
+      set daily_book matrix:from-row-list tempar_prix_3
+      if Disp_Val? = true
+      [print matrix:pretty-print-text daily_book]
+      let col_max matrix:get-column daily_book 3 ;CRASO ERROR, ANTES ERA LA COLUMNA 2, WRONG!
+      let max_val max(col_max)
+      if Disp_Val? = true
+      [print (word "El calce maximo es " max_val)]
+      let tempar_prix_5 []
+      set i 0
+      while [i < length(tempar_prix_3)] [
+        if item 3 (item i tempar_prix_3) = max_val
+        [set tempar_prix_5 lput(item i tempar_prix_3) tempar_prix_5] 
+        set i i + 1]
+      if Disp_Val? = true [print (word "El libro depurado es")]
+      let daily_book2 matrix:from-row-list tempar_prix_5
+      if Disp_Val? = true
+      [print matrix:pretty-print-text daily_book2]
+      let col_min matrix:get-column daily_book2 4
+      let min_val min(col_min)
+      if Disp_Val? = true
+      [print (word "El valor minimo es " min_val)]
+      
+      let tempar_prix_6 []
+      set i 0
+      while [i < length(tempar_prix_5)][
+        if item 4 (item i tempar_prix_5) = min_val
+        [set tempar_prix_6 lput(item i tempar_prix_5) tempar_prix_6] 
+        set i i + 1]
+      if Disp_Val? = true
+      [print (word "Finalmente")]
+      let daily_book3 matrix:from-row-list tempar_prix_6
+      if Disp_Val? = true
+      [print matrix:pretty-print-text daily_book3]
+      
+      let tempar_prix_7 []
+      set i 0
+      while [i < length(tempar_prix_6)] [
+        set tempar_prix_7 lput(item 0 (item i tempar_prix_6)) tempar_prix_7
+        set i i + 1]
+      set meanprix aprox mean(tempar_prix_7) tick_size
+    ]
+    [set meanprix last(historic_price)]
+    if Disp_Val? = true [print (word "El precio final de mercado debe ser " meanprix)]
+    let book_buy2 filter [first ? >= meanprix] book_buy
+    let tempbook [] 
+    foreach (filter [first ? > meanprix] book_buy2) [
+      set i 0 while [i < item 2 ?] 
+      [let tempar replace-item 2 ? 1 
+        set tempbook lput(tempar) tempbook 
+        set i i + 1]]
+    set book_buy2 sort-by [first ?1 > first ?2] tempbook
+    ;show book_buy2
+    let book_sell2 sort-by [first ?1 < first ?2] (filter [first ? <= meanprix] book_sell)
+    ;show book_sell2
+    if length(book_buy2) > 0 and length(book_sell2) > 0 [
+      set i 0
+      let ll length(book_buy2)
+      if length(book_sell2) < ll
+      [set ll length(book_sell2)]
+      while [i < ll] [
+        let ac (item 2 (item i book_sell2)) 
+        let vendedor (item 1 (item i book_sell2)) 
+        let comprador (item 1 (item i book_buy2)) 
+        ;La Accion
+        ask accion (item 2 (item i book_sell2)) [
+          set estado "vendida"
+          set precio meanprix
+          set propietario comprador]
+        ;El que vende
+        if vendedor != "B" [
+          ask agente vendedor [
+            set dinero dinero + meanprix
+            let p position ac (map [first ?] portafolio)
+            set portafolio remove-item p portafolio
+            if length(portafolio) = 0
+            [set shape "person"]]]
+        ;El que compra
+        ask agente comprador [
+          set dinero dinero - meanprix
+          let tempar []
+          set tempar lput(ac) tempar
+          set tempar lput(meanprix) tempar
+          set tempar lput(ticks) tempar
+          set portafolio lput(tempar) portafolio
+          set shape "person student"]
+        let tempar []
+        set tempar lput(ticks) tempar
+        set tempar lput(vendedor) tempar
+        set tempar lput(comprador) tempar
+        set tempar lput(ac) tempar
+        set tempar lput(meanprix) tempar
+        set historic_trans lput tempar historic_trans
+        set i i + 1]
+    ]
+  set actual_volume length(map [last ?] (filter [first ? = ticks] historic_trans))
+  if Disp_Val? = true [print (word "El total de transacciones es de " actual_volume)]
+  ]
+end 
+
+to update_price
+  let pm 0
+  let lp last(historic_price)
+  ifelse actual_volume > 0
+  [set pm last(last(historic_trans))] ;mean(book_transactions)
+  [
+    ifelse length(book_sell) > 0 and length(book_buy) > 0 [
+      let am max(map [first ?] book_buy)
+      let bm min(map [first ?] book_sell)
+      set pm aprox ((am + bm) / 2) tick_size]
+    [set pm last(historic_price)]
+  ]
+  let ren ln(pm / lp)
+  set historic_price lput pm historic_price
+  set historic_rent lput ren historic_rent
+  if length historic_rent >= 300 ;200 iniciales + 100 de ajuste
+  [set ret_db lput ren ret_db]
+  if Disp_val? = true
+  [print (word"Y el nuevo precio al terminar transacciones es de " last(historic_price))]
+  let forecast matrix:forecast-linear-growth historic_price
+  ifelse fund? = true [
+    set lin_trend_fund aprox first(forecast) tick_size
+    if choque? = 0 [
+      set global_fund lin_trend_fund
+      set array_ref []
+      set array_ref lput global_fund array_ref
+      set array_ref lput T_Ref_% array_ref]
+    ] 
+  [set lin_trend_fund global_fund]
+end 
+
+to clean_db
+  if length(historic_price) > 300 [
+    set historic_price sublist historic_price (length(historic_price) - 300) (length(historic_price))
+    set historic_rent sublist historic_rent (length(historic_rent) - 300) (length(historic_rent))]
+  set historic_trans []
+  set daily_book []
+  set book_buy []
+  set book_sell []
+end 
+
+to update_plots [a]
+if a = 1 [
+  set-current-plot "Retornos"
+  set-current-plot-pen "default"
+  if length(historic_price) > 200
+  [set-plot-pen-color 105]
+  plot last(historic_rent)]
+
+set-current-plot "Precio"
+  if length(historic_price) > 200
+  [set-plot-pen-color 105]
+  plot last(historic_price)
+
+if a = 2 or a = 3
+[
+  set-current-plot "Retornos"
+  set-current-plot-pen "default"
+  if length(historic_price) > 200
+  [set-plot-pen-color 105]
+  plot last(historic_rent)
+  
+  if Modo = "Traza" and ticks > 100 [
+    file-write ticks
+    file-write T_Ref_%
+    file-write (count agentes with [tipo = "Trend Chasing"] + count agentes with [tipo = "Chartist"])
+    file-write count agentes with [tipo = "Fundamentalista"]
+    file-write count agentes with [tipo = "Noisy"]
+    file-write last(historic_price)
+    file-write " "
+    file-print last(historic_rent)]
+  
+  set-current-plot "Agentes por tipologia"
+  set-current-plot-pen "Tec"
+  plot (count agentes with [tipo = "Trend Chasing"] + count agentes with [tipo = "Chartist"])
+  set-current-plot-pen "Fund"
+  plot count agentes with [tipo = "Fundamentalista"]
+  set-current-plot-pen "Noisy"
+  plot count agentes with [tipo = "Noisy"]
+  set-current-plot "Retorno Promedio"
+  if ticks >= 150 [
+    if length(index_array) > 0 [
+      set-current-plot-pen "A. Crec."
+      plot item 0 index_array  
+      set-current-plot-pen "B. Calma"
+      plot item 1 index_array
+      set-current-plot-pen "C. Nerv."
+      plot item 2 index_array
+      set-current-plot-pen "D. Crisis"
+      plot item 3 index_array]
+    set-current-plot-pen "Simulado"
+    plot ret_medio]
+
+  set-current-plot "Rentabilidad"
+  set-current-plot-pen "Rentabilidad"
+  plot mean([mi_rendimiento] of agentes) * 100
+  set-current-plot-pen "Rent media"
+  ifelse length(rent_db) > 0 and ticks > 0  [plot mean rent_db]
+  [plot 0]
+]
+end 
+
+to update_patrimonio
+  ask agentes [
+    let tt length(portafolio) * last(historic_price)
+    set patrimonio int(dinero + tt)
+    set mi_rendimiento ((patrimonio / dinero_inic)) - 1;* (ticks - desde) / 244) - 1
+    ]
+  
+  ;Ahora evaluamos la expansion y contraccion del mercado;
+  set rent_db lput (mean([mi_rendimiento] of agentes) * 100) rent_db
+  if Crecimiento = True and ticks > 100 [
+    let ren mean([mi_rendimiento] of agentes) * 100
+    if mean(rent_db) > ren [set ren mean rent_db]
+    if count(agentes with [length(portafolio) = 0 and pt+1 < actual_price]) > 0 and count(agentes) > min_agentes [ 
+        if (ren < T_Ref_% ) [
+          let n  int((T_Ref_% - ren) / 100 * count(agentes)) + 1
+          if n > count(agentes with [length(portafolio) = 0]) [set n count(agentes with [length(portafolio) = 0])]
+          if count(agentes) - n < min_agentes [set n count(agentes) - min_agentes]
+          ;ask n-of n agentes with [length(portafolio) > 0] [set senal -1] ; Si el panorama afuera es mas favorable, un agente con acciones VENDE
+          ask n-of n agentes with [length(portafolio) = 0] [die]
+          ]
+        ]
+      if (update_rent >= (T_Ref_% / 100)) [ 
+        create_new_agents
+        ask agentes [set senal 0]]
+      ]
+end 
+
+to collect_statistics
+  set actual_price last(historic_price)
+  set ret_price last(historic_rent)
+  ifelse length ret_db > 0
+  [set ret_medio mean(ret_db)]
+  [set ret_medio 0]
+  set number_agents count(agentes)
+  set number_acciones count(acciones)
+end 
+
+to crear_titulos
+    create-Acciones 10 [
+    set size 0.1
+    set hidden? true
+    set estado "libre"
+    set propietario "B"
+    set precio last(historic_price)]
+end 
+
+to generar_pos
+  ifelse choque? = 0 [
+    set choque? 1
+    set T_Ref_% T_Ref_% / 2
+    set t_choque 50]
+  [set choque? 0
+    set T_Ref_% item 1 array_ref]
+end 
+
+to generar_neg
+  ifelse choque? = 0 [
+    set choque? -1
+    set global_fund (global_fund * (100 - Magnitud) / 100)
+    set T_Ref_% int(mean([mi_rendimiento] of agentes) * 100) * (1 + Magnitud / 25)
+    set t_choque 5]
+  [set choque? 0
+    set global_fund lin_trend_fund
+    set T_Ref_% item 1 array_ref]
+end 
+
+to setup_indice 
+  if Indice = "IGBC" [
+    set index_array lput 0.00229 index_array
+    set index_array lput 0.0008123 index_array
+    set index_array lput -0.0027 index_array
+    set index_array lput -0.0066 index_array
+    set index_array lput 0.0001205 index_array
+    if modo = "Indice" [
+      set Distribucion_riqueza_inicial "Normal"
+      set Agentes_Iniciales 500
+      set Lambda 0.75
+      set Tick_size 1
+      set Sigma_1 0.6
+      set Sigma_2 2.6
+      set n0 0.25
+      set k 0.15
+      set L_max 50
+      set Ruido 0.2
+      set Crecimiento true
+      set T_Ref_% 0.75]]
+  if Indice = "S&P500" [
+    set index_array lput 0.00062 index_array
+    set index_array lput 0.0003008 index_array
+    set index_array lput -0.00073 index_array
+    set index_array lput -0.00177 index_array
+    set index_array lput 0.0001091 index_array
+    if modo = "Indice" [
+      set Distribucion_riqueza_inicial "Normal"
+      set Agentes_Iniciales 700
+      set Lambda 0.75
+      set Tick_size 1
+      set Sigma_1 0.5
+      set Sigma_2 1.5
+      set n0 0.15
+      set k 0.45
+      set L_max 50
+      set Ruido 0.2
+      set Crecimiento true
+      set T_Ref_% 1.0]]
+  if Indice = "BVSP" [
+    set index_array lput 0.00153 index_array
+    set index_array lput 0.0004266 index_array
+    set index_array lput -0.00063 index_array
+    set index_array lput -0.00040 index_array
+    set index_array lput 0.0002106 index_array
+    if modo = "Indice" [
+      set Distribucion_riqueza_inicial "Uniforme"
+      set Agentes_Iniciales 600
+      set Lambda 0.90
+      set Tick_size 1
+      set Sigma_1 0.5
+      set Sigma_2 2.0
+      set n0 0.15
+      set k 0.42
+      set L_max 50
+      set Ruido 0.2
+      set Crecimiento true
+      set T_Ref_% 1.0]]
+    if Indice = "IPSA" [
+    set index_array lput 0.00180793 index_array
+    set index_array lput 0.00091044 index_array
+    set index_array lput -0.00025778 index_array
+    set index_array lput -0.00227601 index_array
+    set index_array lput 0.00006301 index_array
+    if modo = "Indice" [
+      set Distribucion_riqueza_inicial "Uniforme"
+      set Agentes_Iniciales 600
+      set Lambda 0.75
+      set Tick_size 1
+      set Sigma_1 0.5
+      set Sigma_2 2.0
+      set n0 0.15
+      set k 0.2
+      set L_max 50
+      set Ruido 0.2
+      set Crecimiento true
+      set T_Ref_% 1.0]]
+end 
+
+to-report aprox [a b]
+  let temp a
+  if (a / b) != int(a / b) [
+    ifelse (a / b) - int(a / b) < 0.5
+    [set temp int(a / b) * b]
+    [set temp int(a / b) * b + b]]
+  report temp
+end 
+
+to-report update_L [L]
+  let j 0
+  let subli_ret []
+  set subli_ret sublist historic_rent (length(historic_rent) - L) length(historic_rent)
+  report mean(subli_ret)
+end 
+
+to-report update_rent
+  let dininic []
+  let dinactual []
+  ask agentes [
+    set dininic lput(dinero_inic) dininic
+    set dinactual lput(patrimonio) dinactual]
+  let rentact []
+  let i 0
+  while [i < length(dininic)][
+    ifelse item i dininic != 0
+    [set rentact lput((item i dinactual) / (item i dininic)) rentact]
+    [set rentact lput(0) rentact]
+    set i i + 1]
+  let rent mean(rentact) - 1
+  set rent rent * 244 / (ticks + 1)
+  report rent
+end 
