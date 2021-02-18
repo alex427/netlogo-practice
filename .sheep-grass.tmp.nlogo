@@ -1,48 +1,113 @@
 turtles-own [energy]
+breed[sheep a-sheep]
+breed[wolves wolf]
+
 to setup
   ;清理状态
   clear-all
   reset-ticks
+
   ;创建草地
   ask patches[
     ;随机，20%的草地是绿色
-    if random-float 1 < 0.2[
+    if random-float 1 < initial-rate-grass[
       set pcolor green
     ]
   ]
-  ;创建一只turtle
-  create-turtles 1 [
+
+  ;创建turtle
+  create-sheep initial-number-sheep [
     set energy 100
+    ;set energy random (2 * sheep-gain-from-food)
+    set shape  "sheep"
+    set color white
+    set size 1.5
+    set label-color blue - 2
+    setxy random-xcor random-ycor
   ]
+
+  create-wolves 3 [
+    set energy 200
+    set shape  "wolf"
+    set color yellow
+    set size 2
+    set label-color blue - 2
+    setxy random-xcor random-ycor
+  ]
+
+  display-labels
 end
 to go
+  if not any? turtles [ stop ]
+  ;if count sheep < 1  [stop]
+  if count wolves < 1  [stop]
   ;加入食物
   add_food
-  ;操作turtles
-  ask turtles[
+
+  ;羊的程序
+  ask sheep[
     ;移动
-    turtle_move
+    sheep_move
     ;出生
-    turtle_breed
+    sheep_reproduce
     ;死亡
     turtle_die
   ]
+
+  ;狼的程序
+  ask wolves [
+    wolf_move
+    eat-sheep
+    turtle_die
+    reproduce-wolves
+  ]
+
   ;计时
   tick
+  display-labels
 end
+
+to wolf_move
+  rt random 50
+  lt random 50
+  fd 1
+  set energy energy - 1
+end
+
+to reproduce-wolves
+  if energy > 600[
+    set energy energy - 500
+    hatch 1 [
+      rt random-float 360
+      fd 1
+    ]
+  ]
+end
+
+to eat-sheep
+  let prey one-of sheep-here
+  if prey != nobody  [
+    ask prey [ die ]
+    ;狼吃羊，能量增长80
+    ;实验证明狼吃羊获得的能量是一个关键参数
+    set energy energy + w_rate
+  ]
+end
+
 to add_food
   ask n-of 10 patches[
     set pcolor green
   ]
 end
-to turtle_move
+to sheep_move
   ;吃草 吃草的前提是草存在，吃完草，羊的能量+10，草变成黑色
+  ;实验证明羊吃草获得的能量是一个关键参数
   if pcolor = green[
-    set energy energy + 10
+    set energy energy + s_rate
     set pcolor black
   ]
   ;调整移动方向  20%的情况会调整方向
-  if random-float 1 < 0.2[
+  if random-float 1 < 0.3[
     ;heading后面的参数是角度数，random 360就是0-360之间的任意整数
     set heading random 360
   ]
@@ -51,11 +116,11 @@ to turtle_move
   ;向前一步
   forward 1
 end
-to turtle_breed
+to sheep_reproduce
   ;当羊的energy超过500时，触发出生逻辑
   if energy > 500[
     ;羊的能量减少500
-    set energy energy - 500
+    set energy energy - 300
     ;出生hatch
     hatch 1[
         ;小羊能量给定100，向前走一步与母体分离
@@ -68,6 +133,9 @@ to turtle_die
   if energy <= 0 [
     die
   ]
+end
+to display-labels
+  ask turtles [ set label "" ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -147,8 +215,102 @@ true
 true
 "" ""
 PENS
-"sheep" 1.0 0 -5298144 true "" "plot count turtles"
+"sheep" 1.0 0 -5298144 true "" "plot count sheep"
 "grass" 1.0 0 -13210332 true "" "plot count patches with [pcolor = green]"
+"wolf" 1.0 0 -1184463 true "" "plot count wolves"
+
+SLIDER
+45
+498
+287
+531
+initial-number-sheep
+initial-number-sheep
+0
+100
+10.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+293
+497
+517
+530
+initial-rate-grass
+initial-rate-grass
+0
+1
+0.3
+0.1
+1
+NIL
+HORIZONTAL
+
+MONITOR
+21
+185
+79
+230
+sheep
+count sheep
+17
+1
+11
+
+MONITOR
+23
+256
+81
+301
+wolf
+count wolves
+17
+1
+11
+
+MONITOR
+28
+320
+86
+365
+grass
+count patches with [pcolor = green]
+17
+1
+11
+
+SLIDER
+520
+497
+693
+531
+w_rate
+w_rate
+0
+100
+15.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+696
+496
+869
+530
+s_rate
+s_rate
+0
+100
+30.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
