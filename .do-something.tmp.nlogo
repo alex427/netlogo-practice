@@ -143,6 +143,8 @@ to john_act
     print price
   ]
 end
+
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
@@ -206,15 +208,15 @@ NIL
 1
 
 PLOT
-1160
-77
-1360
-227
+885
+28
+1763
+422
 plot 1
 NIL
 NIL
 0.0
-10.0
+1000.0
 0.0
 10.0
 false

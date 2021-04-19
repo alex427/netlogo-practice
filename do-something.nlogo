@@ -105,13 +105,15 @@ to jack_act
        set share share + 100
        set money money - 100
        set price price * 1.2
+       print price
      ]
      this_trend <= 1.5[
        set share share - 100
        set money money + 100
        set price price * 0.8
+       print price
      ])
-    print price
+
   ]
 end
 
@@ -134,13 +136,15 @@ to john_act
        set share share + 10
        set money money - 10
        set price price * 1.05
+       print price
      ]
      this_trend <= 1.5[
        set share share - 10
        set money money + 10
        set price price * 0.95
+       print price
      ])
-    print price
+
   ]
 end
 @#$#@#$#@
@@ -206,15 +210,15 @@ NIL
 1
 
 PLOT
-1160
-77
-1360
-227
+885
+28
+1763
+422
 plot 1
 NIL
 NIL
 0.0
-10.0
+1000.0
 0.0
 10.0
 false
