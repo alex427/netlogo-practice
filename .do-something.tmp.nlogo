@@ -1,141 +1,147 @@
-turtles-own [energy]
-breed[sheep a-sheep]
-breed[wolves wolf]
+turtles-own [xyz]
+
+globals [price]
+
+breed [jacks jack]
+breed [johns john]
+breed [infoes info]
+
+jacks-own [money share]
+johns-own [money share]
+infoes-own [trend]
 
 to setup
   ;清理状态
   clear-all
   reset-ticks
 
-  ;创建草地
-  ask patches[
-    ;随机，20%的草地是绿色
-    if random-float 1 < initial-rate-grass[
-      set pcolor green
-    ]
-  ]
+  ;初始化全局变量
+  ;price before deal
+  set price  1
 
-  ;创建turtle
-  create-sheep initial-number-sheep [
-    set energy 100
-    ;set energy random (2 * sheep-gain-from-food)
-    set shape  "sheep"
+  ;初始化object
+  create-jacks 10 [
+    set money 100000
+    set share 2500
     set color white
-    set size 1.5
+    set size 1.8
     set label-color blue - 2
     setxy random-xcor random-ycor
   ]
 
-  create-wolves 3 [
-    set energy 200
-    set shape  "wolf"
-    set color yellow
-    set size 2
-    set label-color blue - 2
+  create-johns 100 [
+    set money 1000
+    set share 200
+    set color green
+    set size 1.0
+    set label-color white - 2
     setxy random-xcor random-ycor
   ]
 
-  display-labels
+   create-infoes 30 [
+    set trend 1
+    set color red
+    set size 1.0
+    set label-color white - 2
+    setxy random-xcor random-ycor
+  ]
+
 end
-to go
-  if not any? turtles [ stop ]
-  ;if count sheep < 1  [stop]
-  if count wolves < 1  [stop]
-  ;加入食物
-  add_food
 
-  ;羊的程序
-  ask sheep[
-    ;移动
-    sheep_move
-    ;出生
-    sheep_reproduce
-    ;死亡
-    turtle_die
+;主函数
+to go
+
+  ask infoes[
+    ;随机移动
+    info_move
   ]
 
-  ;狼的程序
-  ask wolves [
-    wolf_move
-    eat-sheep
-    turtle_die
-    reproduce-wolves
+  ask jacks[
+    ;随机移动
+    jack_move
+    ;获取信息,根据信息作出判断，并立即采取行动
+    jack_act
+  ]
+
+  ask johns[
+    ;随机移动
+    john_move
+    ;获取信息,根据信息作出判断，并立即采取行动
+    john_act
   ]
 
   ;计时
   tick
-  display-labels
+
 end
 
-to wolf_move
-  rt random 50
-  lt random 50
-  fd 1
-  set energy energy - 1
-end
 
-to reproduce-wolves
-  if energy > 600[
-    set energy energy - 500
-    hatch 1 [
-      rt random-float 360
-      fd 1
-    ]
-  ]
-end
-
-to eat-sheep
-  let prey one-of sheep-here
-  if prey != nobody  [
-    ask prey [ die ]
-    ;狼吃羊，能量增长80
-    ;实验证明狼吃羊获得的能量是一个关键参数
-    set energy energy + w_rate
-  ]
-end
-
-to add_food
-  ask n-of 10 patches[
-    set pcolor green
-  ]
-end
-to sheep_move
-  ;吃草 吃草的前提是草存在，吃完草，羊的能量+10，草变成黑色
-  ;实验证明羊吃草获得的能量是一个关键参数
-  if pcolor = green[
-    set energy energy + s_rate
-    set pcolor black
-  ]
-  ;调整移动方向  20%的情况会调整方向
-  if random-float 1 < 0.3[
-    ;heading后面的参数是角度数，random 360就是0-360之间的任意整数
-    set heading random 360
-  ]
-  ;能量损耗
-  set energy energy - 1
-  ;向前一步
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;info agent函数
+to info_move
+  set trend trend * (random-float 2)
+  ;print trend
+  right random 50
+  left random 50
   forward 1
 end
-to sheep_reproduce
-  ;当羊的energy超过500时，触发出生逻辑
-  if energy > 500[
-    ;羊的能量减少500
-    set energy energy - 300
-    ;出生hatch
-    hatch 1[
-        ;小羊能量给定100，向前走一步与母体分离
-      forward 1
-      set energy 100
-    ]
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;jack agent函数
+to jack_move
+  right random 50
+  left random 50
+  forward 1
+  set money money - 10
+end
+
+to jack_act
+  let signal one-of infoes-here
+  if signal != nobody  [
+    let this_trend [trend] of signal
+    (ifelse
+     this_trend > 1.5[
+       set share share + 100
+       set money money - 100
+       set price price * 1.2
+     ]
+     this_trend <= 1.5[
+       set share share - 100
+       set money money + 100
+       set price price * 0.8
+     ])
+    print price
   ]
 end
-to turtle_die
-  if energy <= 0 [
-    die
-  ]
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;john agent函数
+to john_move
+  right random 50
+  left random 50
+  forward 1
+  set money money - 1
 end
-to display-labels
-  ask turtles [ set label "" ]
+
+to john_act
+  let signal one-of infoes-here
+  if signal != nobody  [
+    let this_trend [trend] of signal
+    (ifelse
+     this_trend > 1.5[
+       set share share + 10
+       set money money - 10
+       set price price * 1.05
+     ]
+     this_trend <= 1.5[
+       set share share - 10
+       set money money + 10
+       set price price * 0.95
+     ])
+    print price
+  ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -166,10 +172,10 @@ ticks
 30.0
 
 BUTTON
-44
 47
-122
-80
+36
+125
+69
 setup
 setup
 NIL
@@ -183,10 +189,10 @@ NIL
 1
 
 BUTTON
-50
-117
-113
-150
+46
+98
+109
+131
 go
 go
 T
@@ -200,117 +206,22 @@ NIL
 1
 
 PLOT
-829
-23
-1611
-444
-种群
-Time
-Population
+1160
+77
+1360
+227
+plot 1
+NIL
+NIL
 0.0
 10.0
 0.0
 10.0
-true
-true
+false
+false
 "" ""
 PENS
-"sheep" 1.0 0 -5298144 true "" "plot count sheep"
-"grass" 1.0 0 -13210332 true "" "plot count patches with [pcolor = green]"
-"wolf" 1.0 0 -1184463 true "" "plot count wolves"
-
-SLIDER
-45
-498
-287
-531
-initial-number-sheep
-initial-number-sheep
-0
-100
-10.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-293
-497
-517
-530
-initial-rate-grass
-initial-rate-grass
-0
-1
-0.3
-0.1
-1
-NIL
-HORIZONTAL
-
-MONITOR
-21
-185
-79
-230
-sheep
-count sheep
-17
-1
-11
-
-MONITOR
-23
-256
-81
-301
-wolf
-count wolves
-17
-1
-11
-
-MONITOR
-28
-320
-86
-365
-grass
-count patches with [pcolor = green]
-17
-1
-11
-
-SLIDER
-520
-497
-693
-531
-w_rate
-w_rate
-0
-100
-15.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-696
-496
-869
-530
-s_rate
-s_rate
-0
-100
-30.0
-1
-1
-NIL
-HORIZONTAL
+"default" 1.0 0 -16777216 true "" "plot price"
 
 @#$#@#$#@
 ## WHAT IS IT?
