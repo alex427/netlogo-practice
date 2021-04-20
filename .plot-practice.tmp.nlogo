@@ -1,184 +1,51 @@
-turtles-own [xyz]
-
-globals [price]
-
-breed [jacks jack]
-breed [johns john]
-breed [infoes info]
-
-jacks-own [money share]
-johns-own [money share]
-infoes-own [trend]
+turtles-own [price]
 
 to setup
-  ;清理状态
   clear-all
   reset-ticks
-
-  ;初始化全局变量
-  ;price before deal
-  set price  1
-
-  ;初始化object
-  create-jacks 10 [
-    set money 100000
-    set share 2500
-    set color white
-    set size 1.8
-    set label-color blue - 2
-    setxy random-xcor random-ycor
+  create-turtles 1[
+    set price 1
   ]
-
-  create-johns 100 [
-    set money 1000
-    set share 200
-    set color green
-    set size 1.0
-    set label-color white - 2
-    setxy random-xcor random-ycor
-  ]
-
-   create-infoes 20 [
-    set trend 1
-    set color red
-    set size 1.0
-    set label-color white - 2
-    setxy random-xcor random-ycor
-  ]
-
 end
 
-;主函数
 to go
-
-  ask infoes[
-    ;随机移动
-    info_move
+  ask turtles[
+    ;画圈
+    ;pen-down repeat 36 [ fd 1 rt 10 ]
+    set price price * 1.1
   ]
-
-  ask jacks[
-    ;随机移动
-    jack_move
-    ;获取信息,根据信息作出判断，并立即采取行动
-    jack_act
-  ]
-
-  ask johns[
-    ;随机移动
-    john_move
-    ;获取信息,根据信息作出判断，并立即采取行动
-    john_act
-  ]
-
-  ;计时
   tick
-
 end
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;info agent函数
-to info_move
-  set trend trend * (random-float 2)
-  ;print trend
-  right random 50
-  left random 50
-  forward 1
-end
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-to update_price[this_info rate]
-ask this_info [
-  set price price * rate
-  print price
-]
-end
-
-to update_price2[this_price rate]
-  set price this_price * rate
-  print price
-end
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;jack agent函数
-to jack_move
-  right random 50
-  left random 50
-  forward 1
-  set money money - 10
-end
-
-to jack_act
-  let signal one-of infoes-here
-  if signal != nobody  [
-    let this_trend [trend] of signal
-    (ifelse
-     this_trend > 1.5[
-       set share share + 100
-       set money money - 100
-       ;update_price2 signal 1.2
-       update_price2 price 1.2
-     ]
-     this_trend <= 1.5[
-       set share share - 100
-       set money money + 100
-       ;update_price signal 0.8
-       update_price2 price 0.8
-     ])
-
-  ]
-end
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;john agent函数
-to john_move
-  right random 50
-  left random 50
-  forward 1
-  set money money - 1
-end
-
-to john_act
-  let signal one-of infoes-here
-  if signal != nobody  [
-    let this_trend [trend] of signal
-    (ifelse
-     this_trend > 1.5[
-       set share share + 10
-       set money money - 10
-       ;update_price signal 1.05
-       update_price2 price 1.05
-     ]
-     this_trend <= 1.5[
-       set share share - 10
-       set money money + 10
-       ;update_price signal 0.95
-       update_price2 price 0.95
-     ])
-
-  ]
-end
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-to stock-price-plot
+to do-my-plot
   set-current-plot-pen "pen-1"
   set-plot-pen-interval 1
-  plot-pen-down
-  plot price
-end
+  ;plot-pen-down
+  plot-pen-up
+  plot 0
+  plot 2
+  plot 16
+  plot 8
 
-to stock-price-plot2
-  set-current-plot-pen "pen-1"
-  set-plot-pen-interval 1
-  let dataset [price] of infoes
-  print dataset
+  set-current-plot-pen "pen-2"
+  ;plot-pen-down
+  plot-pen-up
+  plotxy 0 -5
+  plotxy 3 -5
+  plotxy 6 -15
+  plotxy 20 -25
+  plot-pen-up
+
+  ;绘制m
+  set-current-plot-pen "pen-3"
+  set-plot-pen-interval 2
+  let dataset [price] of turtles
   if not empty? dataset [
     let price2 item 0 dataset
     plot-pen-down
     plot price2
   ]
+
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -202,17 +69,17 @@ GRAPHICS-WINDOW
 16
 -16
 16
-0
-0
+1
+1
 1
 ticks
 30.0
 
 BUTTON
 47
-36
+51
 125
-69
+84
 setup
 setup
 NIL
@@ -226,11 +93,11 @@ NIL
 1
 
 BUTTON
-46
-98
-109
-131
-go
+48
+115
+111
+148
+NIL
 go
 T
 1
@@ -243,22 +110,24 @@ NIL
 1
 
 PLOT
-885
-28
-1763
-422
+884
+99
+1651
+480
 plot 1
 x
 y
-0.0
-1000.0
-0.0
-10.0
+-20.0
+20.0
+-20.0
+20.0
+true
 false
-false
-"" "stock-price-plot"
+"" "do-my-plot"
 PENS
-"pen-1" 1.0 0 -5298144 true "" ""
+"pen-1" 1.0 0 -13297659 true "" ""
+"pen-2" 1.0 0 -10899396 true "" ""
+"pen-3" 1.0 0 -1184463 true "" ""
 
 @#$#@#$#@
 ## WHAT IS IT?

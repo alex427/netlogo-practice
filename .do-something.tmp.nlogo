@@ -38,7 +38,7 @@ to setup
     setxy random-xcor random-ycor
   ]
 
-   create-infoes 30 [
+   create-infoes 20 [
     set trend 1
     set color red
     set size 1.0
@@ -86,6 +86,19 @@ to info_move
   forward 1
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to update_price[this_info rate]
+ask this_info [
+  set price price * rate
+  print price
+]
+end
+
+to update_price2[this_price rate]
+  set price this_price * rate
+  print price
+end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;jack agent函数
@@ -104,14 +117,16 @@ to jack_act
      this_trend > 1.5[
        set share share + 100
        set money money - 100
-       set price price * 1.2
+       ;update_price2 signal 1.2
+       update_price2 price 1.2
      ]
      this_trend <= 1.5[
        set share share - 100
        set money money + 100
-       set price price * 0.8
+       ;update_price signal 0.8
+       update_price2 price 0.8
      ])
-    print price
+
   ]
 end
 
@@ -133,18 +148,31 @@ to john_act
      this_trend > 1.5[
        set share share + 10
        set money money - 10
-       set price price * 1.05
+       ;update_price signal 1.05
+       update_price2 price 1.05
      ]
      this_trend <= 1.5[
        set share share - 10
        set money money + 10
-       set price price * 0.95
+       ;update_price signal 0.95
+       update_price2 price 0.95
      ])
-    print price
+
   ]
 end
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to stock-price-plot2
+  set-current-plot-pen "pen-1"
+  set-plot-pen-interval 1
+  let dataset [price] of infoes
+  print dataset
+  if not empty? dataset [
+    let price2 item 0 dataset
+    plot-pen-down
+    plot price2
+  ]
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
@@ -213,17 +241,17 @@ PLOT
 1763
 422
 plot 1
-NIL
-NIL
+x
+y
 0.0
 1000.0
 0.0
 10.0
 false
 false
-"" ""
+"" "stock-price-plot"
 PENS
-"default" 1.0 0 -16777216 true "" "plot price"
+"pen-1" 1.0 0 -5298144 true "" ""
 
 @#$#@#$#@
 ## WHAT IS IT?
